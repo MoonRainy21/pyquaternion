@@ -501,8 +501,31 @@ class Quaternion:
     def magnitude(self):
         return self.norm
 
+    def normalized(self, fast=True):
+        """Get a unit quaternion (versor) copy of this Quaternion object.
+
+        A unit quaternion has a `norm` of 1.0
+
+        Returns:
+            A new Quaternion object clone that is guaranteed to be a unit quaternion
+        """
+
+        if fast:
+            mag_squared = np.dot(self.q, self.q)
+            if mag_squared == 0:
+                return self.__class__(0.0)
+            if abs(1.0 - mag_squared) < 2.107342e-08:
+                mag = ((1.0 + mag_squared) / 2.0)
+            else:
+                mag = sqrt(mag_squared)
+            return self.__class__(array=(self.q / mag))
+
+        return self.__class__(array=(self.q / self.norm))
+
     def _normalise(self):
-        """Object is guaranteed to be a unit quaternion after calling this
+        """
+        DEPRECATED: Due to the side effects of this method. Use `normalized` instead.
+        Object is guaranteed to be a unit quaternion after calling this
         operation UNLESS the object is equivalent to Quaternion(0)
         """
         if not self.is_unit():
@@ -511,7 +534,9 @@ class Quaternion:
                 self.q = self.q / n
 
     def _fast_normalise(self):
-        """Normalise the object to a unit quaternion using a fast approximation method if appropriate.
+        """
+        DEPRECATED: Due to the side effects of this method. Use `normalized` instead.
+        Normalise the object to a unit quaternion using a fast approximation method if appropriate.
 
         Object is guaranteed to be a quaternion of approximately unit length
         after calling this operation UNLESS the object is equivalent to Quaternion(0)
@@ -869,8 +894,8 @@ class Quaternion:
                 Calling this method will implicitly normalise the endpoints to unit quaternions if they are not already unit length.
         """
         # Ensure quaternion inputs are unit quaternions and 0 <= amount <=1
-        q0._fast_normalise()
-        q1._fast_normalise()
+        q0 = q0.normalized()
+        q1 = q1.normalized()
         amount = np.clip(amount, 0, 1)
 
         dot = np.dot(q0.q, q1.q)
@@ -946,7 +971,9 @@ class Quaternion:
         return 0.5 * self * Quaternion(vector=rate)
 
     def integrate(self, rate, timestep):
-        """Advance a time varying quaternion to its value at a time `timestep` in the future.
+        """
+        DEPRECATED: Due to the side effects of this method. Use `integrated` instead.
+        Advance a time varying quaternion to its value at a time `timestep` in the future.
 
         The Quaternion object will be modified to its future value.
         It is guaranteed to remain a unit quaternion.
@@ -975,6 +1002,39 @@ class Quaternion:
             q2 = Quaternion(axis=axis, angle=angle)
             self.q = (self * q2).q
             self._fast_normalise()
+
+    def integrated(self, rate, timestep):
+        """Advance a time varying quaternion to its value at a time `timestep` in the future.
+
+        The original Quaternion object is not modified. The returned Quaternion object
+        is guaranteed to be a unit quaternion.
+
+        Params:
+            rate: numpy 3-array (or array-like) describing rotation rates about the
+                global x, y and z axes respectively.
+            timestep: interval over which to integrate into the future.
+                Assuming *now* is `T=0`, the integration occurs over the interval
+                `T=0` to `T=timestep`. Smaller intervals are more accurate when
+                `rate` changes over time.
+
+        Returns:
+            A new Quaternion object representing the quaternion at the future time `timestep`.
+
+        Note:
+            The solution is closed form given the assumption that `rate` is constant
+            over the interval of length `timestep`.
+        """
+        self._fast_normalise()
+        rate = self._validate_number_sequence(rate, 3)
+
+        rotation_vector = rate * timestep
+        rotation_norm = np.linalg.norm(rotation_vector)
+        if rotation_norm > 0:
+            axis = rotation_vector / rotation_norm
+            angle = rotation_norm
+            q2 = Quaternion(axis=axis, angle=angle)
+            return self * q2
+        return self
 
 
     @property
